@@ -1,0 +1,377 @@
+<title>Fork Tuning Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: scene and live readouts stay in view on the left; terrain and fork controls scroll on the right. Stacks to one column on phones. */
+:root{
+  --bg:#f1f4f6;--panel:#ffffff;--ink:#14212b;--muted:#566873;--line:#d2dadf;
+  --accent:#1c6e8c;--accent-soft:#dcedf3;--good:#1f7a4d;--warn:#9c5f00;--bad:#b3261e;--sw-off:#97a3aa;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10181e;--panel:#18232b;--ink:#e6edf1;--muted:#93a4af;--line:#2a3944;
+    --accent:#6cc4dc;--accent-soft:#1d3a46;--good:#5ad38f;--warn:#f0b24d;--bad:#ff8077;--sw-off:#56646d;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10181e;--panel:#18232b;--ink:#e6edf1;--muted:#93a4af;--line:#2a3944;
+  --accent:#6cc4dc;--accent-soft:#1d3a46;--good:#5ad38f;--warn:#f0b24d;--bad:#ff8077;--sw-off:#56646d;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:20px 32px}
+.wrap{max-width:1000px;margin-inline:auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-direction:column;gap:2px}
+h1{font-family:var(--display);font-weight:600;font-size:34px;line-height:1.05;letter-spacing:.01em;margin:0;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:60ch}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+@media (min-width:820px){
+  .grid{grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);align-items:start}
+  .stage{position:sticky;top:16px}
+}
+.stage,.controls{display:flex;flex-direction:column;gap:12px;min-width:0}
+svg.scene{display:block;width:100%;height:auto;border-radius:12px;border:1px solid var(--line)}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.metric{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.metric .k{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.metric .v{font-family:var(--mono);font-weight:500;font-size:16px;color:var(--ink);margin-top:2px;overflow-wrap:anywhere}
+.v.good{color:var(--good)}.v.warn{color:var(--warn)}.v.bad{color:var(--bad)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.panel h2{font-family:var(--display);font-weight:600;font-size:20px;letter-spacing:.03em;text-transform:uppercase;margin:0;color:var(--ink)}
+.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.seg button{font:500 14px var(--body);padding:8px 4px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.seg button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;flex-direction:column;gap:4px}
+.row .top{display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.row .top span:last-child{font-family:var(--mono);color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0;height:28px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;font:500 14px var(--body);padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.phead{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+.switch-wrap{display:inline-flex;align-items:center;gap:8px;font:500 14px var(--body);color:var(--ink)}
+.sw{position:relative;flex:none;width:44px;height:26px;border-radius:13px;border:1px solid transparent;background:var(--sw-off);cursor:pointer;padding:0;transition:background .15s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .15s}
+.sw[aria-checked="true"]{background:var(--good)}
+.sw[aria-checked="true"]::after{transform:translateX(18px)}
+.bar{height:6px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:3px;background:var(--muted);transition:width .15s}
+.bar i.good{background:var(--good)}.bar i.warn{background:var(--warn)}.bar i.bad{background:var(--bad)}
+.avg{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:4px}
+.avgrow{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.btn.small{padding:5px 10px;font-size:13px}
+@media (prefers-reduced-motion:reduce){.bar i,.sw,.sw::after{transition:none}}
+input[type=range]:disabled{opacity:.55;cursor:not-allowed}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.note{font-size:13px;color:var(--muted);margin:0}
+.mm{font-size:.55em;font-weight:400;color:var(--muted);margin-left:4px;white-space:nowrap}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+</style>
+
+<div class="wrap">
+<header>
+<h1>Fork Tuning Lab</h1>
+<p>Change the terrain, then tune air pressure and damping to keep the tire on the ground. Enable Live Valve to adapt dynamically.</p>
+</header>
+<div class="grid">
+<section class="stage" aria-label="Animation and readouts">
+<h2 class="sr-only">Animation</h2>
+<svg id="sv" class="scene" viewBox="0 0 380 330" role="img">
+<title>Mountain bike wheel and suspension fork on a bumpy trail</title>
+<desc>Close-up of a knobby wheel with spokes, rotor and hub, and a raked fork. The thinner lower leg moves with the wheel while the thicker upper leg moves with the bike body, so the fork compresses and extends over the selected terrain.</desc>
+<rect width="380" height="330" fill="#dde5ea"/>
+<g id="wheel">
+<circle r="127" fill="none" stroke="#26282b" stroke-width="30"/>
+<circle r="134" fill="none" stroke="#3b3e42" stroke-width="1"/>
+<g id="knobs"></g>
+<circle r="108" fill="none" stroke="#b8bec4" stroke-width="8"/>
+<circle r="103" fill="none" stroke="#6b7177" stroke-width="2"/>
+<g id="spokes" stroke="#c9ced3" stroke-width="1.2"></g>
+<g transform="rotate(40)"><line x1="0" y1="-103" x2="0" y2="-90" stroke="#888d92" stroke-width="3"/><rect x="-3" y="-93" width="6" height="5" rx="1" fill="#d33a2c"/></g>
+<circle r="46" fill="none" stroke="#aab0b6" stroke-width="10"/>
+<g id="holes" fill="#dde5ea"></g>
+<circle r="24" fill="#3d4146"/>
+<circle r="12" fill="#7b8087"/>
+<g id="bolts" fill="#c9ced3"></g>
+</g>
+<g id="fork">
+<g id="lower">
+<rect x="-6" y="-260" width="12" height="260" rx="3" fill="#b9c0c7"/>
+<rect x="-6" y="-260" width="3" height="260" fill="#d8dde2"/>
+<rect x="-10" y="-22" width="20" height="30" rx="6" fill="#4a5d70"/>
+<circle r="6" fill="#cfd3d6"/>
+<circle r="2" fill="#6b7177"/>
+</g>
+<g id="upper">
+<rect x="-11" y="-420" width="22" height="346" rx="5" fill="#3a4a5a"/>
+<rect x="-7" y="-420" width="3" height="346" fill="#566b80"/>
+<rect x="-11" y="-120" width="22" height="7" fill="#d9a441"/>
+<rect x="-11" y="-170" width="22" height="7" fill="#d9a441"/>
+<rect x="-11" y="-220" width="22" height="7" fill="#d9a441"/>
+<rect x="-12" y="-80" width="24" height="9" rx="3" fill="#2b3946"/>
+</g>
+</g>
+<path id="gfill" fill="#7a5c3a"/>
+<path id="gline" fill="none" stroke="#4e3920" stroke-width="3" stroke-linejoin="round"/>
+<g id="dots" fill="#5f4629"></g>
+</svg>
+<div class="metrics">
+<div class="metric"><div class="k">Ground contact</div><div id="m0" class="v good">100%</div><div class="bar"><i id="b0"></i></div><div id="a0" class="avg">Avg –</div></div>
+<div class="metric"><div class="k">Travel used</div><div id="m1" class="v">0%</div><div class="bar"><i id="b1"></i></div><div id="a1" class="avg">Avg –</div></div>
+<div class="metric"><div class="k">Feel</div><div id="m2" class="v">Smooth</div><div class="bar"><i id="b2"></i></div><div id="a2" class="avg">Avg –</div></div>
+</div>
+<div class="avgrow"><span id="ael" class="note">Averages since reset</span><button id="ra" class="btn small" type="button">Reset averages</button></div>
+<p class="note">Slow-motion replay of a faster ride. Travel is measured against the selected fork's full stroke, including sag.</p>
+</section>
+
+<section class="controls" aria-label="Controls">
+<div class="panel">
+<div class="phead">
+<h2>Terrain</h2>
+<div class="switch-wrap">
+<button id="vt" class="sw" type="button" role="switch" aria-checked="false" aria-labelledby="vtl"></button>
+<span id="vtl">Variable Terrain</span>
+</div>
+</div>
+<p id="cur" class="note" hidden></p>
+<div id="tr" class="seg">
+<button data-t="irr" aria-pressed="true">Irregular</button>
+<button data-t="wash" aria-pressed="false">Washboard</button>
+<button data-t="hard" aria-pressed="false">Hard bump</button>
+</div>
+<div class="row"><div class="top"><label for="pa">Terrain amplitude</label><span id="va">100%</span></div><input id="pa" type="range" min="25" max="200" step="5" value="100"></div>
+</div>
+<div class="panel">
+<div class="phead">
+<h2>Fork tuning</h2>
+<div class="switch-wrap">
+<button id="lv" class="sw" type="button" role="switch" aria-checked="false" aria-labelledby="lvl"></button>
+<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#f26b1d"/><path d="M4.5 12h3.2l2-4.6 3.4 9 2.2-4.4h4.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<span id="lvl">Enable Live Valve</span>
+</div>
+</div>
+<div class="row"><div class="top"><label for="p0">Air pressure</label><span id="v0">100 psi</span></div><input id="p0" type="range" min="60" max="140" step="1" value="100"></div>
+<div class="row"><div class="top"><label for="p1">Low-speed compression</label><span id="v1">30</span></div><input id="p1" type="range" min="0" max="100" step="1" value="30"></div>
+<div class="row"><div class="top"><label for="p2">High-speed compression</label><span id="v2">20</span></div><input id="p2" type="range" min="0" max="100" step="1" value="20"></div>
+<div class="row"><div class="top"><label for="p3">Low-speed rebound</label><span id="v3">20</span></div><input id="p3" type="range" min="0" max="100" step="1" value="20"></div>
+<div class="row"><div class="top"><label for="p4">High-speed rebound</label><span id="v4">20</span></div><input id="p4" type="range" min="0" max="100" step="1" value="20"></div>
+<div class="actions">
+<button id="rs" class="btn primary" type="button">Reset to terrain tune</button>
+<button id="tg" class="btn" type="button">Pause</button>
+</div>
+<div class="row"><div class="top"><span id="ftl">Fork travel</span></div><div id="ft" class="seg" role="group" aria-labelledby="ftl"><button data-m="120" aria-pressed="false">120 mm</button><button data-m="140" aria-pressed="true">140 mm</button><button data-m="180" aria-pressed="false">180 mm</button></div></div>
+<div class="row"><div class="top"><span id="spl">Animation speed</span></div><div id="sp" class="seg" role="group" aria-labelledby="spl"><button data-s="1" aria-pressed="true">1x</button><button data-s="2" aria-pressed="false">2x</button><button data-s="4" aria-pressed="false">4x</button></div></div>
+</div>
+</section>
+</div>
+</div>
+
+<script>
+(function(){
+var NS="http://www.w3.org/2000/svg",R=150,BASE=262,H=330,V=230,CX=190,REST=BASE-R,VT=60;
+var SIN=Math.sin(20*Math.PI/180),COS=Math.cos(20*Math.PI/180);
+var MMPX=140/60,spd=1,TR=60,D0=18;
+var G=5681,MW=0.25,MB=1,SLOW=230/650;
+var TUNE={irr:[100,30,20,20,20],wash:[84,71,1,2,67],hard:[105,30,25,15,15]};
+var BASEA={irr:2.1,wash:0.95,hard:2.6};
+var TF={
+irr:function(u){return 14*Math.pow(Math.max(0,Math.sin(u/41)),2)+9*Math.pow(Math.max(0,Math.sin(u/23+2)),3)+3.5*Math.abs(Math.sin(u/9))},
+wash:function(u){return 9*(1-Math.abs(Math.cos(Math.PI*u/64)))},
+hard:function(u){var x=((u%520)+520)%520-260;return 40*Math.exp(-(x*x)/648)}
+};
+var terr="irr",amp=1,vt=false,baseS=2.1,lastGap=0,aC=0,aT=0,aR=0,aN=0;
+var LC=2980,NAMES=["Irregular","Washboard","Hard bump"];
+function sstep(t){t=Math.max(0,Math.min(1,t));return t*t*(3-2*t)}
+function wts(u){var p=((u%LC)+LC)%LC,a=0,b=0,c=0;
+if(p<900)a=1;else if(p<1060){b=sstep((p-900)/160);a=1-b}
+else if(p<1760)b=1;else if(p<1920){c=sstep((p-1760)/160);b=1-c}
+else if(p<2820)c=1;else{a=sstep((p-2820)/160);c=1-a}
+return [a,b,c]}
+function vh(u){var w=wts(u),p=((u%LC)+LC)%LC,h=0,d1,d2;
+if(w[0]>0)h+=w[0]*TF.irr(u);
+if(w[1]>0)h+=w[1]*TF.wash(u);
+if(w[2]>0){d1=p-2170;d2=p-2610;h+=w[2]*40*(Math.exp(-d1*d1/648)+Math.exp(-d2*d2/648))}
+return h}
+function gy(x,o){return BASE-amp*(vt?vh(x+o):TF[terr](x+o))}
+function curTune(){
+if(!vt)return TUNE[terr];
+var w=wts(CX+off),tl=[TUNE.irr,TUNE.wash,TUNE.hard],r=[],k,j,s;
+for(k=0;k<5;k++){s=0;for(j=0;j<3;j++)s+=w[j]*tl[j][k];r.push(Math.round(s))}
+return r}
+function baseNow(){
+if(!vt)return BASEA[terr];
+var w=wts(CX+off);return w[0]*BASEA.irr+w[1]*BASEA.wash+w[2]*BASEA.hard}
+function curName(){
+var p=((CX+off)%LC+LC)%LC;
+if(p<900)return NAMES[0];
+if(p<1060)return NAMES[0]+" to "+NAMES[1];
+if(p<1760)return NAMES[1];
+if(p<1920)return NAMES[1]+" to "+NAMES[2];
+if(p<2820)return NAMES[2];
+return NAMES[2]+" to "+NAMES[0]}
+function contact(o,wx){var cy=1e9,dx,v;for(dx=-70;dx<=70;dx+=2){v=gy(wx+dx,o)-Math.sqrt(R*R-dx*dx);if(v<cy)cy=v}return Math.max(0,(REST-cy)/COS)}
+function mk(n,a,p){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e}
+function $(id){return document.getElementById(id)}
+var i,g,s,a,b,t,h,j,d;
+var knobs=$("knobs");
+for(i=0;i<36;i++){g=mk("g",{transform:"rotate("+(i*10)+")"},knobs);
+if(i%2===0){mk("rect",{x:-6,y:-151,width:12,height:11,rx:2,fill:"#141517"},g)}
+else{mk("rect",{x:-13,y:-149,width:6,height:9,rx:2,fill:"#141517"},g);mk("rect",{x:7,y:-149,width:6,height:9,rx:2,fill:"#141517"},g)}}
+var sp=$("spokes");
+for(s=0;s<24;s++){a=s*15*Math.PI/180;b=a+(s%2?1:-1)*0.5;
+mk("line",{x1:24*Math.sin(a),y1:-24*Math.cos(a),x2:104*Math.sin(b),y2:-104*Math.cos(b)},sp)}
+var ho=$("holes");
+for(h=0;h<12;h++){t=h*30*Math.PI/180;mk("circle",{cx:46*Math.sin(t),cy:-46*Math.cos(t),r:2.6},ho)}
+var bo=$("bolts");
+for(j=0;j<6;j++){t=j*60*Math.PI/180;mk("circle",{cx:18*Math.sin(t),cy:-18*Math.cos(t),r:2},bo)}
+var dots=$("dots"),dl=[];
+for(d=0;d<18;d++){dl.push({u:(d*97)%440,dep:10+((d*53)%60),el:mk("circle",{r:1.5+(d%3)},dots)})}
+var wheel=$("wheel"),fork=$("fork"),lower=$("lower"),upper=$("upper"),gf=$("gfill"),gl=$("gline");
+fork.setAttribute("transform","translate("+CX+","+REST+") rotate(-20)");
+var P=TUNE.irr.slice(),sl=[],vl=[];
+var units=[" psi","","","",""];
+for(i=0;i<5;i++){(function(k){
+sl[k]=$("p"+k);vl[k]=$("v"+k);
+sl[k].addEventListener("input",function(){P[k]=+sl[k].value;vl[k].textContent=P[k]+units[k]})
+})(i)}
+var off=0,playing=true,last=performance.now();
+var dp=contact(0,CX),w=dp,vw=0,u=0,vu=0,ema=1,peakD=0,peakA=0,lastUI=0,warm=0.6;
+function reinit(){dp=contact(off,CX);w=dp;vw=0;u=0;vu=0;peakD=0;peakA=0;ema=1;warm=0.6}
+function resync(){dp=contact(off,CX-w*SIN);if(w<dp)w=dp;peakD=0;peakA=0;warm=0.4}
+$("rs").addEventListener("click",function(){
+var tn=curTune();
+for(var k=0;k<5;k++){P[k]=tn[k];sl[k].value=tn[k];vl[k].textContent=tn[k]+units[k]}
+peakD=0;peakA=0;warm=0.4
+});
+var tbs=document.querySelectorAll("#tr button");
+for(i=0;i<tbs.length;i++){tbs[i].addEventListener("click",function(){
+terr=this.getAttribute("data-t");
+for(var k=0;k<tbs.length;k++){tbs[k].setAttribute("aria-pressed",tbs[k]===this?"true":"false")}
+resync();ema=1
+})}
+$("pa").addEventListener("input",function(){amp=+this.value/100;$("va").textContent=this.value+"%";resync()});
+var lv=false;
+function setTune(tn){for(var k=1;k<5;k++){if(P[k]!==tn[k]){P[k]=tn[k];sl[k].value=tn[k];vl[k].textContent=tn[k]+units[k]}}}
+$("lv").addEventListener("click",function(){
+lv=!lv;
+this.setAttribute("aria-checked",lv?"true":"false");
+for(var k=1;k<5;k++){sl[k].disabled=lv}
+$("rs").disabled=lv;
+if(lv){setTune(curTune());peakD=0;peakA=0;warm=0.4}
+});
+$("vt").addEventListener("click",function(){
+vt=!vt;
+this.setAttribute("aria-checked",vt?"true":"false");
+for(var k=0;k<tbs.length;k++){
+tbs[k].disabled=vt;
+tbs[k].setAttribute("aria-pressed",(!vt&&tbs[k].getAttribute("data-t")===terr)?"true":"false")
+}
+$("cur").hidden=!vt;
+resync();ema=1;baseS=baseNow()
+});
+function damp(v,cl,ch){var x=Math.abs(v),f=x<VT?cl*x:cl*VT+ch*(x-VT);return v>=0?f:-f}
+function step(dt,o0){
+var n=24,hh=dt*SLOW/n,k,o,dC,rate,pk=P[0]/100,dc,vrel,spr,dm,F,ab,aw;
+var Fp=200*pk,Ks=300*pk*60/TR,Kb=3000*pk;
+var cLC=5+P[1],cHC=2+P[2]*0.6,cLR=5+P[3]*1.5,cHR=2+P[4]*0.8;
+for(k=0;k<n;k++){
+o=o0+V*dt*(k+1)/n;
+dC=contact(o,CX-w*SIN);rate=(dC-dp)/hh;dp=dC;
+dc=D0+w-u;vrel=vw-vu;
+spr=Fp+Ks*dc+Kb*Math.pow(Math.max(dc,0)/TR,3);
+if(dc>TR)spr+=30000*(dc-TR);
+if(dc<0)spr+=30000*dc;
+dm=vrel>=0?damp(vrel,cLC,cHC):damp(vrel,cLR,cHR);
+F=spr+dm;
+ab=(F-G)/MB;
+vu+=ab*hh;u+=vu*hh;
+aw=(-F-MW*G)/MW;
+vw+=aw*hh;w+=vw*hh;
+if(w<dC){w=dC;vw=Math.max(vw,rate)}
+if(warm<=0){if(Math.abs(ab)>peakA)peakA=Math.abs(ab);if(dc>peakD)peakD=dc}
+}
+if(!isFinite(w)||!isFinite(u)||Math.abs(w)>500||Math.abs(u)>500){reinit()}
+var dec=Math.exp(-dt/3);peakA*=dec;peakD*=dec;baseS=Math.max(baseNow(),baseS*dec);
+if(warm>0)warm-=dt
+}
+function draw(dt){
+var top="",x;
+for(x=0;x<=380;x+=2){top+=(x?"L":"M")+x+","+gy(x,off).toFixed(1)}
+gl.setAttribute("d",top);
+gf.setAttribute("d",top+"L380,"+H+"L0,"+H+"Z");
+var wx=CX-w*SIN,cy=REST-w*COS;
+wheel.setAttribute("transform","translate("+wx.toFixed(2)+","+cy.toFixed(2)+") rotate("+(off/R*180/Math.PI).toFixed(2)+")");
+lower.setAttribute("transform","translate(0,"+(-w).toFixed(2)+")");
+upper.setAttribute("transform","translate(0,"+(-u).toFixed(2)+")");
+var gap=1e9,dx,gg,i2,o3,px;
+for(dx=-70;dx<=70;dx+=2){gg=gy(wx+dx,off)-(cy+Math.sqrt(R*R-dx*dx));if(gg<gap)gap=gg}
+lastGap=gap;
+if(playing){ema+=((gap>3?0:1)-ema)*(1-Math.exp(-dt/2))}
+for(i2=0;i2<dl.length;i2++){o3=dl[i2];px=(((o3.u-off)%440)+440)%440-30;o3.el.setAttribute("cx",px.toFixed(1));o3.el.setAttribute("cy",(gy(px,off)+o3.dep).toFixed(1))}
+}
+function tone(el,cls){el.className="v"+(cls?" "+cls:"")}
+function ui(now){
+if(now-lastUI<150)return;lastUI=now;
+if(vt)$("cur").textContent="Now crossing: "+curName();
+var c=Math.round(ema*100),m0=$("m0");
+m0.textContent=c+"%";
+tone(m0,c<85?"bad":(c<95?"warn":"good"));
+var tp=Math.round(peakD/TR*100),m1=$("m1");
+if(tp>100)m1.textContent="Bottomed out";else m1.innerHTML=tp+'%<span class="mm">'+Math.round(peakD*MMPX)+' mm</span>';
+tone(m1,tp>100?"bad":(tp>85?"warn":""));
+var r=(peakA/G)/(baseS*amp),f=$("m2");
+f.textContent=r<0.7?"Plush":(r<1.3?"Smooth":(r<1.9?"Firm":"Harsh"));
+tone(f,r>=1.9?"bad":(r>=1.3?"warn":""));
+updAvg()
+}
+function feelName(r){return r<0.7?"Plush":(r<1.3?"Smooth":(r<1.9?"Firm":"Harsh"))}
+function bar(id,pct,cls){var e=$(id);e.style.width=Math.max(0,Math.min(100,pct))+"%";e.className=cls}
+function updAvg(){
+if(aN<0.5){
+bar("b0",0,"");bar("b1",0,"");bar("b2",0,"");
+$("a0").textContent="Avg –";$("a1").textContent="Avg –";$("a2").textContent="Avg –";
+$("ael").textContent="Averages since reset";return}
+var c=100*aC/aN,t=100*aT/aN,r=aR/aN;
+bar("b0",c,c<85?"bad":(c<95?"warn":"good"));
+bar("b1",t,t>100?"bad":((t>85||t<30)?"warn":"good"));
+bar("b2",r/2.5*100,r>=1.9?"bad":(r>=1.3?"warn":"good"));
+$("a0").textContent="Avg "+Math.round(c)+"%";
+$("a1").textContent="Avg "+Math.round(t)+"% ("+Math.round(t/100*TR*MMPX)+" mm)";
+$("a2").textContent="Avg "+feelName(r);
+$("ael").textContent="Averaged over "+Math.round(aN)+" s"}
+$("ra").addEventListener("click",function(){aC=0;aT=0;aR=0;aN=0;updAvg()});
+function frame(t){
+var dt=Math.min(0.05,(t-last)/1000);last=t;
+if(lv)setTune(curTune());
+if(playing){for(var q=0;q<spd;q++){step(dt,off);off+=V*dt}}
+draw(dt*spd);
+if(playing&&warm<=0){aC+=(lastGap>3?0:1)*dt*spd;aT+=(peakD/TR)*dt*spd;aR+=(peakA/G)/(baseS*amp)*dt*spd;aN+=dt*spd}
+ui(t);
+requestAnimationFrame(frame)
+}
+var ftb=$("ft").querySelectorAll("button");
+for(var fi=0;fi<ftb.length;fi++)ftb[fi].addEventListener("click",function(){
+var mm=+this.getAttribute("data-m");MMPX=140/60;TR=mm/MMPX;D0=0.3*TR;
+for(var j=0;j<ftb.length;j++)ftb[j].setAttribute("aria-pressed",ftb[j]===this?"true":"false");
+reinit();aC=0;aT=0;aR=0;aN=0;updAvg()});
+var spb=$("sp").querySelectorAll("button");
+for(var si=0;si<spb.length;si++)spb[si].addEventListener("click",function(){spd=+this.getAttribute("data-s");for(var j=0;j<spb.length;j++)spb[j].setAttribute("aria-pressed",spb[j]===this?"true":"false")});
+var tg=$("tg");
+tg.addEventListener("click",function(){
+playing=!playing;
+tg.textContent=playing?"Pause":"Play"
+});
+if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches){
+playing=false;tg.textContent="Play"
+}
+draw(0.05);
+requestAnimationFrame(frame)
+})();
+</script>
